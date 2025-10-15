@@ -1,5 +1,13 @@
 # Cloudflare Durable Objects Latency Testing
 
+
+
+**Demo video:**
+
+<video src="video/tool_use.mov" controls width="640">
+Your browser does not support the video tag. You can download and view the video here: video/tool_use.mov
+</video>
+
 ```bash
 # Server
 cd doperf && bun install && bun run dev
