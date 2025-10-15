@@ -35,6 +35,7 @@ export default {
         const url = new URL(request.url);
         const locationHintParam = url.searchParams.get("locationHint");
         if (!locationHintParam) {
+            console.error("[Worker] locationHint is required");
             return new Response(JSON.stringify({ error: "locationHint is required" }), { status: 400 });
         }
 

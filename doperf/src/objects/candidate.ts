@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { PERF_TYPE } from "shared";
 import { parseEchoer } from "shared";
 import { type } from "arktype";
+import { executeWorkloads } from "./workloads";
 const validPerfTypes = Object.values(PERF_TYPE);
 
 export class Candidate extends DurableObject<Env> {
@@ -17,6 +18,7 @@ export class Candidate extends DurableObject<Env> {
 	}
 
 
+
 	async fetch(request: Request): Promise<Response> {
 		// Validate the request is a WebSocket upgrade request
 		if (request.headers.get("upgrade") !== "websocket") {
@@ -28,30 +30,23 @@ export class Candidate extends DurableObject<Env> {
 		const url = new URL(rawUrl);
 		const perfType = url.searchParams.get("perfType");
 		if (!perfType) {
+			console.error("[Candidate] perfType is required");
 			return new Response(JSON.stringify({ error: "perfType is required" }), { status: 400 });
 		}
 		if (!validPerfTypes.includes(perfType as PERF_TYPE)) {
+			console.error("[Candidate] invalid perfType");
 			return new Response(JSON.stringify({ error: "invalid perfType" }), { status: 400 });
 		}
-
-		// Execute the perf type
-		switch (perfType) {
-			case PERF_TYPE.Echoer:
-				{
-					// Upgrade the request to a WebSocket
-					const webSocketPair = new WebSocketPair();
-					const [client, server] = Object.values(webSocketPair);
-					this.ctx.acceptWebSocket(server);
-					// Attach the perf type as a tag to the websocket
-					server.serializeAttachment(perfType);
-					return new Response(null, {
-					  status: 101,
-					  webSocket: client,
-					});
-				}
-		}
-
-		return new Response(JSON.stringify({ error: "invalid perfType" }), { status: 400 });
+		// Upgrade the request to a WebSocket
+		const webSocketPair = new WebSocketPair();
+		const [client, server] = Object.values(webSocketPair);
+		this.ctx.acceptWebSocket(server);
+		// Attach the perf type as a tag to the websocket
+		server.serializeAttachment(perfType);
+		return new Response(null, {
+			status: 101,
+			webSocket: client,
+		});
 	}
 
 	async webSocketMessage(ws: WebSocket, data: string): Promise<void> {
@@ -67,9 +62,10 @@ export class Candidate extends DurableObject<Env> {
 		const t_rx_epoch = Date.now();
 
 		switch (perfType) {
-			case PERF_TYPE.Echoer || PERF_TYPE.EchoerProcessing: {
+			case PERF_TYPE.EchoerProcessing:
+			case PERF_TYPE.Echoer: {
 				// Validate and parse the incoming message
-				const parsed = parseEchoer(data);	
+				const parsed = parseEchoer(data);
 
 				if (parsed instanceof type.errors) {
 					// Log moved to end to reduce overhead during message processing
@@ -83,7 +79,8 @@ export class Candidate extends DurableObject<Env> {
 				parsed.t_rx_epoch = t_rx_epoch;
 
 				if (perfType === PERF_TYPE.EchoerProcessing) {
-					// TODO: do some processing work, including SQLite work
+					// Execute various workloads with timing controls
+					await executeWorkloads(this.ctx, parsed);
 				}
 
 				// Attach server transmit timestamp
@@ -91,7 +88,7 @@ export class Candidate extends DurableObject<Env> {
 
 				// Echo back
 				ws.send(JSON.stringify(parsed));
-				
+
 				// Log at the end to reduce overhead during message processing
 				console.debug(`[Echoer] Received message @${t_rx_epoch}:`, data.slice(0, 100) + (data.length > 100 ? "..." : ""), "bytes", data.length);
 				console.debug(`[Echoer] Echoing back with t_rx_epoch=${parsed.t_rx_epoch}  @t_tx2_epoch=${parsed.t_tx2_epoch}`);

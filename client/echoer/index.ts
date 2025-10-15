@@ -32,9 +32,11 @@ class Echoer {
     ws: WebSocket;
     url: string;
     samples: number;
+    processing: boolean;
     results: EchoSample[] = [];
 
     constructor(url: string, samples = 5, processing = false, locationHint: DurableObjectLocationHint) {
+        this.processing = processing;
         this.url = url;
         this.samples = samples;
         this.ws = new WebSocket(`${url}?perfType=${processing ? PERF_TYPE.EchoerProcessing : PERF_TYPE.Echoer}&locationHint=${locationHint}`);
@@ -99,14 +101,17 @@ class Echoer {
         const downlinks = this.results.map(r => r.downlink);
         const offsets = this.results.map(r => r.offset);
 
-        console.log("\n--- Echoer Summary ---");
-        console.log(`Samples: ${this.results.length}`);
-        console.log(`RTT avg: ${mean(rtts).toFixed(2)} ms`);
-        console.log(`Proc avg: ${mean(procs).toFixed(2)} ms`);
-        console.log(`Up avg: ${mean(uplinks).toFixed(2)} ms`);
-        console.log(`Down avg: ${mean(downlinks).toFixed(2)} ms`);
-        console.log(`Offset avg: ${mean(offsets).toFixed(2)} ms`);
-        console.log("----------------------\n");
+        console.log("\n====== Echoer Results ======");
+        console.log(`Total Samples Collected: ${this.results.length}`);
+        console.log(
+            `Server Mode: ${this.processing ? "Baseline Echo (no additional processing)" : "Processing Enabled (includes SQLite and computations)"}`
+        );
+        console.log(`Average RTT:      ${mean(rtts).toFixed(2)} ms`);
+        console.log(`Average Server Processing: ${mean(procs).toFixed(2)} ms`);
+        console.log(`Average Uplink:   ${mean(uplinks).toFixed(2)} ms`);
+        console.log(`Average Downlink: ${mean(downlinks).toFixed(2)} ms`);
+        console.log(`Average Clock Offset: ${mean(offsets).toFixed(2)} ms`);
+        console.log("===========================\n");
     }
 
 
@@ -124,5 +129,6 @@ class Echoer {
 }
 
 const DEPLOYED_VERSION = "wss://doperf.cloudflare-c49.workers.dev/"
+const LOCAL_DEPLOY_VERSION = "ws://localhost:8787/"
 // me = Middle East
-new Echoer(DEPLOYED_VERSION, 100, false, "me");
+new Echoer(DEPLOYED_VERSION, 100, true, "me");
