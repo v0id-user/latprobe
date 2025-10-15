@@ -1,9 +1,10 @@
 import { Echoer } from "./worker";
-import { mean, min, max, standardDeviation } from "simple-statistics";
 import { saveResultsToJson } from "./json-exporter";
-import { displayPerClientComparison, displayClientResults, displayLocationMetadata, displayClientLocationDetails } from "./graphs";
+import { initializeProgressDisplay, updateProgress, displayResults, cleanup } from "./graphs";
 import type { CliConfig, DurableObjectLocationHint, EchoerResults } from "./types";
 import { getWhereDoApiV3, type WhereDoApiV3 } from "./where-do";
+import { cgiTrace } from "./cgi-trace";
+import { formatRegion } from "./regions";
 
 // Available URL presets
 const DEPLOYED_VERSION = "wss://doperf.cloudflare-c49.workers.dev/";
@@ -113,92 +114,9 @@ function parseArgs(): CliConfig {
     return config;
 }
 
-function aggregateResults(results: EchoerResults[], whereDoData: WhereDoApiV3 | null): void {
-    const allSamples = results.flatMap(r => r.samples);
-    const totalSamples = allSamples.length;
-
-    // Extract all metrics
-    const allRtts = allSamples.map(s => s.rtt);
-    const allProcs = allSamples.map(s => s.proc);
-    const allUplinks = allSamples.map(s => s.uplink);
-    const allDownlinks = allSamples.map(s => s.downlink);
-    const allOffsets = allSamples.map(s => s.offset);
-
-    // Calculate aggregated statistics
-    const stats = {
-        rtt: {
-            mean: mean(allRtts),
-            min: min(allRtts),
-            max: max(allRtts),
-            stdDev: standardDeviation(allRtts)
-        },
-        proc: {
-            mean: mean(allProcs),
-            min: min(allProcs),
-            max: max(allProcs),
-            stdDev: standardDeviation(allProcs)
-        },
-        uplink: {
-            mean: mean(allUplinks),
-            min: min(allUplinks),
-            max: max(allUplinks),
-            stdDev: standardDeviation(allUplinks)
-        },
-        downlink: {
-            mean: mean(allDownlinks),
-            min: min(allDownlinks),
-            max: max(allDownlinks),
-            stdDev: standardDeviation(allDownlinks)
-        },
-        offset: {
-            mean: mean(allOffsets),
-            min: min(allOffsets),
-            max: max(allOffsets),
-            stdDev: standardDeviation(allOffsets)
-        }
-    };
-
-    console.log("\n");
-    console.log("╔════════════════════════════════════════════════════════════════╗");
-    console.log("║              AGGREGATED RESULTS (ALL CLIENTS)                  ║");
-    console.log("╚════════════════════════════════════════════════════════════════╝");
-    console.log(`\nTotal Clients:  ${results.length}`);
-    console.log(`Total Samples:  ${totalSamples}`);
-    
-    console.log(`\n┌─────────────────────────────────────────────────────────────┐`);
-    console.log(`│ Metric          │   Mean   │   Min    │   Max    │  Std Dev │`);
-    console.log(`├─────────────────────────────────────────────────────────────┤`);
-    console.log(`│ RTT             │ ${stats.rtt.mean.toFixed(2).padStart(6)} ms│ ${stats.rtt.min.toFixed(2).padStart(6)} ms│ ${stats.rtt.max.toFixed(2).padStart(6)} ms│ ${stats.rtt.stdDev.toFixed(2).padStart(6)} ms│`);
-    console.log(`│ Processing      │ ${stats.proc.mean.toFixed(2).padStart(6)} ms│ ${stats.proc.min.toFixed(2).padStart(6)} ms│ ${stats.proc.max.toFixed(2).padStart(6)} ms│ ${stats.proc.stdDev.toFixed(2).padStart(6)} ms│`);
-    console.log(`│ Uplink          │ ${stats.uplink.mean.toFixed(2).padStart(6)} ms│ ${stats.uplink.min.toFixed(2).padStart(6)} ms│ ${stats.uplink.max.toFixed(2).padStart(6)} ms│ ${stats.uplink.stdDev.toFixed(2).padStart(6)} ms│`);
-    console.log(`│ Downlink        │ ${stats.downlink.mean.toFixed(2).padStart(6)} ms│ ${stats.downlink.min.toFixed(2).padStart(6)} ms│ ${stats.downlink.max.toFixed(2).padStart(6)} ms│ ${stats.downlink.stdDev.toFixed(2).padStart(6)} ms│`);
-    console.log(`│ Clock Offset    │ ${stats.offset.mean.toFixed(2).padStart(6)} ms│ ${stats.offset.min.toFixed(2).padStart(6)} ms│ ${stats.offset.max.toFixed(2).padStart(6)} ms│ ${stats.offset.stdDev.toFixed(2).padStart(6)} ms│`);
-    console.log(`└─────────────────────────────────────────────────────────────┘`);
-    
-    // Display per-client comparison if multiple clients
-    displayPerClientComparison(results);
-    
-    // Display location metadata
-    displayLocationMetadata(results, whereDoData);
-    
-    // Display individual client details
-    if (results.length > 1) {
-        console.log("\nIndividual Client Details:");
-        results.forEach((result, index) => {
-            displayClientResults(result, index + 1);
-        });
-    } else if (results.length === 1 && results[0]) {
-        console.log("\nClient Details:");
-        displayClientResults(results[0], 1);
-    }
-    
-    // Display detailed location information
-    displayClientLocationDetails(results);
-    
-    console.log("");
-}
 
 async function main() {
+    const ourCgiTrace = await cgiTrace();
     const config = parseArgs();
 
     console.log("╔════════════════════════════════════════════════════════════════╗");
@@ -208,8 +126,9 @@ async function main() {
     console.log(`  Parallel Clients: ${config.clients}`);
     console.log(`  Samples per Client: ${config.samples}`);
     console.log(`  URL: ${config.url}`);
-    console.log(`  Location Hint: ${config.location}`);
+    console.log(`  Location Hint: ${formatRegion(config.location)}`);
     console.log(`  Processing Mode: ${config.processing ? "Enabled" : "Disabled"}`);
+    console.log(`  Client Location: ${ourCgiTrace.colo || 'Unknown'} (${ourCgiTrace.loc || 'Unknown'})`);
     
     // Fetch location data early
     let whereDoData: WhereDoApiV3 | null = null;
@@ -221,13 +140,29 @@ async function main() {
         console.log(`⚠ Warning: Could not fetch location data: ${error}`);
     }
     
-    console.log(`\nStarting ${config.clients} parallel client(s)...\n`);
+    console.log(`\nStarting ${config.clients} parallel client(s)...`);
+    console.log(`Press 'q' or ESC to exit at any time.\n`);
 
-    // Create all clients
+    // Small delay to let user see the config before dashboard takes over
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Initialize progress display
+    initializeProgressDisplay(config.clients, config.samples);
+
+    // Track total progress across all clients
+    let totalCollected = 0;
+    const totalSamples = config.clients * config.samples;
+
+    const progressCallback = (current: number, total: number, clientId: number) => {
+        totalCollected++;
+        updateProgress(totalCollected, totalSamples, clientId);
+    };
+
+    // Create all clients with progress callback
     const clients: Echoer[] = [];
     for (let i = 1; i <= config.clients; i++) {
         clients.push(
-            new Echoer(config.url, config.samples, config.processing, config.location, i)
+            new Echoer(config.url, config.samples, config.processing, config.location, i, progressCallback)
         );
     }
 
@@ -237,16 +172,17 @@ async function main() {
             clients.map(client => client.waitForCompletion())
         );
 
-        // Display aggregated results
-        aggregateResults(results, whereDoData);
+        // Display results in dashboard
+        displayResults(results, whereDoData, ourCgiTrace);
 
         // Save results to JSON file
         const filename = await saveResultsToJson(results, config);
 
-        console.log("✓ All clients completed successfully!");
-        console.log(`📊 Results saved to: ${filename}\n`);
-        process.exit(0);
+        // Keep dashboard visible - user can press 'q' to exit
+        // The process will exit when user closes the dashboard
+        
     } catch (error) {
+        cleanup();
         console.error("\n✗ Error during execution:", error);
         process.exit(1);
     }

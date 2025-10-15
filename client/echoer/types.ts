@@ -77,6 +77,7 @@ export interface JsonOutput {
         attribution: string;
         whereDoData: any; // WhereDoApiV3 data subset
         observedColos: string[];
+        observedRegions: { [key: string]: string };
     };
 }
 

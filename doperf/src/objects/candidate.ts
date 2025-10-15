@@ -77,7 +77,7 @@ export class Candidate extends DurableObject<Env> {
 	 * rbi=*
 	 * kex=*
 	 */
-	async #cgiTrace() {
+	async #cgiTrace(): Promise<CgiTrace> {
 		const traceText = await (await fetch("https://www.cloudflare.com/cdn-cgi/trace")).text();
 		const result: Record<string, string> = {};
 		for (const line of traceText.split("\n")) {
@@ -86,7 +86,7 @@ export class Candidate extends DurableObject<Env> {
 				result[key] = rest.join("=");
 			}
 		}
-		return result;
+		return result as CgiTrace;
 	}
 
 	async webSocketMessage(ws: WebSocket, data: string): Promise<void> {

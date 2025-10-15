@@ -26,13 +26,22 @@ export class Echoer {
     private completionPromise: Promise<EchoerResults>;
     private resolveCompletion!: (results: EchoerResults) => void;
     private rejectCompletion!: (error: Error) => void;
+    private progressCallback?: (current: number, total: number, clientId: number) => void;
     clientId: number;
 
-    constructor(url: string, samples = 5, processing = false, locationHint: DurableObjectLocationHint, clientId = 1) {
+    constructor(
+        url: string,
+        samples = 5,
+        processing = false,
+        locationHint: DurableObjectLocationHint,
+        clientId = 1,
+        progressCallback?: (current: number, total: number, clientId: number) => void
+    ) {
         this.processing = processing;
         this.url = url;
         this.samples = samples;
         this.clientId = clientId;
+        this.progressCallback = progressCallback;
         
         // Create a promise that resolves when all samples are collected
         this.completionPromise = new Promise<EchoerResults>((resolve, reject) => {
@@ -53,7 +62,10 @@ export class Echoer {
     }
 
     private handleOpen = () => {
-        console.log(`[Echoer #${this.clientId}] Connected → ${this.url}`);
+        // Only log if no progress callback (backwards compatibility)
+        if (!this.progressCallback) {
+            console.log(`[Echoer #${this.clientId}] Connected → ${this.url}`);
+        }
         this.sendPing();
     };
 
@@ -107,7 +119,12 @@ export class Echoer {
         // Store results
         this.results.push(sample);
 
-        console.log(`[Echoer #${this.clientId}] Sample ${this.results.length}/${this.samples} - RTT: ${sample.rtt.toFixed(2)}ms`);
+        // Call progress callback or fallback to console.log
+        if (this.progressCallback) {
+            this.progressCallback(this.results.length, this.samples, this.clientId);
+        } else {
+            console.log(`[Echoer #${this.clientId}] Sample ${this.results.length}/${this.samples} - RTT: ${sample.rtt.toFixed(2)}ms`);
+        }
 
         if (this.results.length < this.samples) {
             // Bug: higher timeout ms causes some sort of jitter in the results for some reason

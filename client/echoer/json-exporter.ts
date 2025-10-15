@@ -2,6 +2,7 @@ import { mean, min, max, standardDeviation } from "simple-statistics";
 import { mkdir } from "node:fs/promises";
 import type { CliConfig, JsonOutput, EchoerResults } from "./types";
 import { getWhereDoApiV3, type WhereDoApiV3 } from "./where-do";
+import { formatRegion } from "./regions";
 
 function generateJsonOutput(results: EchoerResults[], config: CliConfig, whereDoData: WhereDoApiV3 | null): JsonOutput {
     const allSamples = results.flatMap(r => r.samples);
@@ -51,6 +52,17 @@ function generateJsonOutput(results: EchoerResults[], config: CliConfig, whereDo
     // Extract unique colos from all samples
     const observedColos = [...new Set(allSamples.map(s => s.cgiTrace.colo).filter((colo): colo is string => colo !== null))];
 
+    // Extract regions with human-readable names
+    const observedRegions: { [key: string]: string } = {};
+    if (whereDoData) {
+        observedColos.forEach(colo => {
+            if (colo && whereDoData.colos[colo]) {
+                const regionCode = whereDoData.colos[colo].nearestRegion;
+                observedRegions[regionCode] = formatRegion(regionCode);
+            }
+        });
+    }
+
     // Build the complete JSON structure
     return {
         timestamp: new Date().toISOString(),
@@ -58,7 +70,7 @@ function generateJsonOutput(results: EchoerResults[], config: CliConfig, whereDo
             clients: config.clients,
             samples: config.samples,
             url: config.url,
-            location: config.location,
+            location: formatRegion(config.location),
             processing: config.processing
         },
         clients: results.map((result, index) => ({
@@ -73,7 +85,8 @@ function generateJsonOutput(results: EchoerResults[], config: CliConfig, whereDo
         metadata: {
             attribution: "Location data from where.durableobjects.live",
             whereDoData: whereDoData || null,
-            observedColos
+            observedColos,
+            observedRegions
         }
     };
 }

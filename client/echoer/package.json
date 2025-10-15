@@ -8,6 +8,7 @@
     "test": "bun run index.ts --clients 5 --samples 50"
   },
   "devDependencies": {
+    "@types/blessed": "^0.1.25",
     "@types/bun": "latest"
   },
   "peerDependencies": {
@@ -15,7 +16,8 @@
   },
   "dependencies": {
     "arktype": "^2.1.23",
-    "simple-statistics": "^7.8.8",
-    "sparkly": "^6.0.1"
+    "blessed": "^0.1.81",
+    "blessed-contrib": "^4.11.0",
+    "simple-statistics": "^7.8.8"
   }
 }
