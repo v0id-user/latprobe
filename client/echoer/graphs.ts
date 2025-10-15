@@ -15,7 +15,10 @@ let statusText: blessed.Widgets.TextElement | null = null;
 export function initializeProgressDisplay(totalClients: number, samplesPerClient: number): void {
     screen = blessed.screen({
         smartCSR: true,
-        title: 'Echoer Performance Testing'
+        title: 'Echoer Performance Testing',
+        fullUnicode: true,
+        dockBorders: false,
+        autoPadding: false
     });
 
     // Create progress bar
@@ -83,14 +86,26 @@ export function displayResults(
     // Create new screen for results
     screen = blessed.screen({
         smartCSR: true,
-        title: 'Echoer Performance Results'
+        title: 'Echoer Performance Results',
+        fullUnicode: true,
+        dockBorders: false,
+        autoPadding: false
     });
 
+    // Ensure minimum terminal size
+    const terminalWidth = process.stdout.columns || 120;
+    const terminalHeight = process.stdout.rows || 30;
+    
+    if (terminalWidth < 120 || terminalHeight < 30) {
+        console.error('Terminal too small. Please resize to at least 120x30 characters.');
+        process.exit(1);
+    }
+    
     const grid = new contrib.grid({ rows: 12, cols: 12, screen: screen });
 
     // === ROW 1-2: Title and Summary ===
     const titleBox = grid.set(0, 0, 1, 12, blessed.box, {
-        content: `{center}{bold}ECHOER PERFORMANCE RESULTS{/bold}{/center}`,
+        content: '',
         tags: true,
         style: {
             fg: 'cyan',
@@ -99,22 +114,37 @@ export function displayResults(
         border: { type: 'line' }
     });
 
-    // === ROW 2-5: Line Charts for Metrics ===
-    const rttLine = grid.set(1, 0, 4, 6, contrib.line, {
+    // === ROW 2-3: RTT and Processing Line Charts ===
+    const rttLine = grid.set(1, 0, 2, 6, contrib.line, {
         style: { line: 'yellow', text: 'green', baseline: 'black' },
         label: 'RTT Over Time (ms)',
         showLegend: true,
         legend: { width: 20 }
     });
 
-    const procLine = grid.set(1, 6, 4, 6, contrib.line, {
+    const procLine = grid.set(1, 6, 2, 6, contrib.line, {
         style: { line: 'cyan', text: 'green', baseline: 'black' },
         label: 'Processing Time (ms)',
         showLegend: true,
         legend: { width: 20 }
     });
 
-    // === ROW 5-8: Bar Chart + Location Info ===
+    // === ROW 3-4: Uplink and Downlink Line Charts ===
+    const uplinkLine = grid.set(3, 0, 2, 6, contrib.line, {
+        style: { line: 'green', text: 'green', baseline: 'black' },
+        label: 'Uplink Delay (ms)',
+        showLegend: true,
+        legend: { width: 20 }
+    });
+
+    const downlinkLine = grid.set(3, 6, 2, 6, contrib.line, {
+        style: { line: 'magenta', text: 'green', baseline: 'black' },
+        label: 'Downlink Delay (ms)',
+        showLegend: true,
+        legend: { width: 20 }
+    });
+
+    // === ROW 5-7: Bar Chart + Location Info ===
     const barChart = grid.set(5, 0, 3, 6, contrib.bar, {
         label: 'Per-Client RTT Comparison (ms)',
         barWidth: 8,
@@ -174,6 +204,24 @@ export function displayResults(
     }));
     procLine.setData(procChartData);
 
+    // Populate Uplink Line Chart
+    const uplinkChartData = results.map((result, idx) => ({
+        title: `Client ${idx + 1}`,
+        x: result.samples.map((_, i) => String(i + 1)),
+        y: result.samples.map(s => s.uplink),
+        style: { line: ['green', 'yellow', 'cyan', 'magenta', 'red'][idx % 5] }
+    }));
+    uplinkLine.setData(uplinkChartData);
+
+    // Populate Downlink Line Chart
+    const downlinkChartData = results.map((result, idx) => ({
+        title: `Client ${idx + 1}`,
+        x: result.samples.map((_, i) => String(i + 1)),
+        y: result.samples.map(s => s.downlink),
+        style: { line: ['magenta', 'yellow', 'cyan', 'green', 'red'][idx % 5] }
+    }));
+    downlinkLine.setData(downlinkChartData);
+
     // Populate Bar Chart
     const barData = {
         titles: results.map((_, idx) => `Client ${idx + 1}`),
@@ -184,12 +232,10 @@ export function displayResults(
     // Populate Location Box
     const allSamples = results.flatMap(r => r.samples);
     const observedColos = [...new Set(allSamples.map(s => s.cgiTrace.colo).filter(Boolean))];
-    const clientColo = clientCgiTrace.colo || 'Unknown';
-    const clientLoc = clientCgiTrace.loc || 'Unknown';
 
     let locationContent = `{bold}Client Location:{/bold}\n`;
-    locationContent += `  Colo: ${clientColo}\n`;
-    locationContent += `  Region: ${clientLoc}\n\n`;
+    locationContent += `  Colo: ${clientCgiTrace.colo || 'Unknown'}\n`;
+    locationContent += `  Region: ${clientCgiTrace.loc || 'Unknown'}\n\n`;
     locationContent += `{bold}Server Colos Observed:{/bold}\n`;
     
     if (observedColos.length === 0) {
@@ -239,6 +285,18 @@ export function displayResults(
     const uplinkStats = calcStats(allUplinks);
     const downlinkStats = calcStats(allDownlinks);
     const offsetStats = calcStats(allOffsets);
+
+    // Populate title box with summary
+    const totalSamples = allSamples.length;
+    const avgRtt = rttStats.mean.toFixed(1);
+    const avgProc = procStats.mean.toFixed(1);
+    const clientCount = results.length;
+    
+    const titleContent = `{center}{bold}ECHOER PERFORMANCE RESULTS{/bold}{/center}
+{center}Clients: ${clientCount} | Samples: ${totalSamples} | Avg RTT: ${avgRtt}ms | Avg Processing: ${avgProc}ms{/center}
+{center}Client: ${clientCgiTrace.colo || 'Unknown'} (${clientCgiTrace.loc || 'Unknown'}) | Server Colos: ${observedColos.length}{/center}`;
+    
+    titleBox.setContent(titleContent);
 
     statsTable.setData({
         headers: ['Metric', 'Mean (ms)', 'Min (ms)', 'Max (ms)', 'StdDev (ms)'],
