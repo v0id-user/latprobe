@@ -4,9 +4,9 @@
 
 **Demo video:**
 
-<video src="video/tool_use.mov" controls width="640">
-Your browser does not support the video tag. You can download and view the video here: video/tool_use.mov
-</video>
+![Demo video](video/tool_use.gif)
+
+
 
 ```bash
 # Server
