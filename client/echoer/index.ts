@@ -4,7 +4,6 @@ import { initializeProgressDisplay, updateProgress, displayResults, cleanup } fr
 import type { CliConfig, DurableObjectLocationHint, EchoerResults } from "./types";
 import { getWhereDoApiV3, type WhereDoApiV3 } from "./where-do";
 import { cgiTrace } from "./cgi-trace";
-import { formatRegion } from "./regions";
 
 // Available URL presets
 const DEPLOYED_VERSION = "wss://doperf.cloudflare-c49.workers.dev/";
@@ -17,7 +16,7 @@ Echoer CLI - Cloudflare Durable Objects Performance Testing Tool
 Usage: bun run index.ts [options]
 
 Options:
-  -c, --clients <number>     Number of parallel clients (default: 1)
+  -c, --clients <number>     Number of parallel clients (default: 1, max: 5)
   -s, --samples <number>     Number of samples per client (default: 100)
   -u, --url <url>           WebSocket URL (default: deployed)
                             Presets: "deployed", "local", or full URL
@@ -26,7 +25,7 @@ Options:
   -h, --help                Display this help message
 
 Examples:
-  bun run index.ts --clients 10 --samples 50
+  bun run index.ts --clients 5 --samples 50
   bun run index.ts -c 5 -s 100 -l weur --processing
   bun run index.ts --url local --clients 3
 `);
@@ -59,7 +58,12 @@ function parseArgs(): CliConfig {
                     console.error("Error: --clients requires a number");
                     process.exit(1);
                 }
-                config.clients = parseInt(nextArg, 10);
+                const requestedClients = parseInt(nextArg, 10);
+                if (requestedClients > 5) {
+                    console.error("Error: --clients cannot be greater than 5");
+                    process.exit(1);
+                }
+                config.clients = requestedClients;
                 i++;
                 break;
 
@@ -119,30 +123,14 @@ async function main() {
     const ourCgiTrace = await cgiTrace();
     const config = parseArgs();
 
-    console.log("╔════════════════════════════════════════════════════════════════╗");
-    console.log("║          Echoer Performance Testing Tool - Starting            ║");
-    console.log("╚════════════════════════════════════════════════════════════════╝");
-    console.log(`\nConfiguration:`);
-    console.log(`  Parallel Clients: ${config.clients}`);
-    console.log(`  Samples per Client: ${config.samples}`);
-    console.log(`  URL: ${config.url}`);
-    console.log(`  Location Hint: ${formatRegion(config.location)}`);
-    console.log(`  Processing Mode: ${config.processing ? "Enabled" : "Disabled"}`);
-    console.log(`  Client Location: ${ourCgiTrace.colo || 'Unknown'} (${ourCgiTrace.loc || 'Unknown'})`);
-    
     // Fetch location data early
     let whereDoData: WhereDoApiV3 | null = null;
     try {
-        console.log(`\nFetching location data from where.durableobjects.live...`);
         whereDoData = await getWhereDoApiV3();
-        console.log(`✓ Location data loaded successfully`);
     } catch (error) {
         console.log(`⚠ Warning: Could not fetch location data: ${error}`);
     }
     
-    console.log(`\nStarting ${config.clients} parallel client(s)...`);
-    console.log(`Press 'q' or ESC to exit at any time.\n`);
-
     // Small delay to let user see the config before dashboard takes over
     await new Promise(resolve => setTimeout(resolve, 1000));
 
@@ -153,7 +141,7 @@ async function main() {
     let totalCollected = 0;
     const totalSamples = config.clients * config.samples;
 
-    const progressCallback = (current: number, total: number, clientId: number) => {
+    const progressCallback = (clientId: number) => {
         totalCollected++;
         updateProgress(totalCollected, totalSamples, clientId);
     };
