@@ -30,13 +30,13 @@ It’s not just an echo test — it’s a growing suite of **performance probes*
 ### Example Output
 
 ```text
-   --- Echoer Summary ---
-   Samples: 100
-   RTT avg: 80.22 ms
-   Proc avg: 0.00 ms
-   Up avg: 40.11 ms
-   Down avg: 40.11 ms
-   Offset avg: 175.42 ms
+--- Echoer Summary ---
+Samples: 100
+RTT avg: 80.22 ms
+Proc avg: 0.00 ms
+Up avg: 40.11 ms
+Down avg: 40.11 ms
+Offset avg: 175.42 ms
 ```
 
 
