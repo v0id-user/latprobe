@@ -41,7 +41,8 @@ export default {
 
         const location = locationHintParam as DurableObjectLocationHint;
 
-        const stub = env.CANDIDATE.getByName("candidate", {
+        const randomName = crypto.randomUUID();
+        const stub = env.CANDIDATE.getByName(randomName, {
             locationHint: location,
         });
 

@@ -10,6 +10,7 @@ export interface CliConfig {
     url: string;
     location: DurableObjectLocationHint;
     processing: boolean;
+    locationExplicitlySet?: boolean;
 }
 
 // Sample metrics
