@@ -1,3 +1,4 @@
+import { extractColoFullName } from './regions';
 import type { EchoerResults } from './types';
 import type { WhereDoApiV3 } from './where-do';
 import type { CgiTrace } from 'shared';
@@ -21,17 +22,21 @@ export function updateProgress(current: number, total: number, clientId: number)
 /**
  * Display final results
  */
-export function displayResults(
+export async function displayResults(
     results: EchoerResults[],
-    whereDoData: WhereDoApiV3 | null,
-    clientCgiTrace: CgiTrace
-): void {
+    clientCgiTrace: CgiTrace,
+    whereDoData?: WhereDoApiV3 | null
+): Promise<void> {
     // Clear the progress line
     console.log('\n');
     
     // Gather all samples and calculate stats
     const allSamples = results.flatMap(r => r.samples);
-    const observedColos = [...new Set(allSamples.map(s => s.cgiTrace.colo).filter(Boolean))];
+    // Collect unique non-null colos only, deduplicated, and safely type them as string
+    const observedColos = Array.from(new Set(
+        allSamples.map(s => s.cgiTrace.colo).filter((v): v is string => typeof v === 'string' && !!v)
+    ));
+    const observedColoFullNames = await Promise.all(observedColos.map(colo => extractColoFullName(colo || '')));
 
     const calcStats = (values: number[]) => {
         const mean = values.reduce((a, b) => a + b, 0) / values.length;
@@ -58,14 +63,47 @@ export function displayResults(
     console.log(`Clients: ${results.length} | Total Samples: ${allSamples.length}`);
     console.log();
     console.log('CLIENT LOCATION:');
-    console.log(`  Colo: ${clientCgiTrace.colo || 'Unknown'}`);
+    const clientColoFullName = clientCgiTrace.colo ? await extractColoFullName(clientCgiTrace.colo) : 'Unknown';
+    console.log(`  Colo: ${clientCgiTrace.colo || 'Unknown'} ${clientCgiTrace.colo ? `(${clientColoFullName})` : ''}`);
     console.log(`  Region: ${clientCgiTrace.loc || 'Unknown'}`);
     console.log();
     console.log('SERVER COLOS OBSERVED:');
     if (observedColos.length === 0) {
         console.log('  No colo information available');
+    } else if (whereDoData && clientCgiTrace.colo) {
+        // Display with likelihood information and full names
+        const clientColoData = whereDoData.colos[clientCgiTrace.colo];
+        if (clientColoData) {
+            for (let i = 0; i < observedColos.length; i++) {
+                const colo = observedColos[i];
+                if (!colo) continue; // Skip null/undefined colos
+                const coloFullName = observedColoFullNames[i];
+                const hostData = clientColoData.hosts[colo];
+                if (hostData) {
+                    const likelihoodPercent = (hostData.likelihood * 100).toFixed(1);
+                    console.log(`  ${colo} (${coloFullName}): ${likelihoodPercent}% likelihood (where.durableobjects.live)`);
+                } else {
+                    console.log(`  ${colo} (${coloFullName}): (likelihood data unavailable)`);
+                }
+            }
+        } else {
+            // Display with full names even when likelihood data is unavailable
+            for (let i = 0; i < observedColos.length; i++) {
+                const colo = observedColos[i];
+                if (!colo) continue;
+                const coloFullName = observedColoFullNames[i];
+                console.log(`  ${colo} (${coloFullName})`);
+            }
+            console.log(`  (client colo not found in location data)`);
+        }
     } else {
-        console.log(`  ${observedColos.join(', ')}`);
+        // Display with full names
+        for (let i = 0; i < observedColos.length; i++) {
+            const colo = observedColos[i];
+            if (!colo) continue;
+            const coloFullName = observedColoFullNames[i];
+            console.log(`  ${colo} (${coloFullName})`);
+        }
     }
     console.log();
     console.log('PERFORMANCE METRICS:');

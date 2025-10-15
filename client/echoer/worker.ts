@@ -172,8 +172,6 @@ export class Echoer {
             if (this.results.length < this.samples) {
                 this.rejectCompletion(new Error(`Connection closed before collecting all samples (${this.results.length}/${this.samples})`));
             }
-        } else {
-            console.log(`[Echoer #${this.clientId}] Connection closed cleanly.`);
         }
     };
 }

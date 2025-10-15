@@ -158,7 +158,7 @@ async function main() {
         );
 
         // Display results
-        displayResults(results, whereDoData, ourCgiTrace);
+        displayResults(results, ourCgiTrace, whereDoData);
 
         // Save results to JSON file
         await saveResultsToJson(results, config);
