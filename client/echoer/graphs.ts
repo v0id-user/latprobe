@@ -77,6 +77,9 @@ export async function displayResults(
             for (let i = 0; i < observedColos.length; i++) {
                 const colo = observedColos[i];
                 if (!colo) continue; // Skip null/undefined colos
+
+                // Extract and print colo full name with likelihood 
+                // (from where.durableobjects.live) if available
                 const coloFullName = observedColoFullNames[i];
                 const hostData = clientColoData.hosts[colo];
                 if (hostData) {
