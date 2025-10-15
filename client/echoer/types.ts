@@ -1,3 +1,5 @@
+import type { CgiTrace } from "shared";
+
 // Type for Durable Object location hints
 export type DurableObjectLocationHint = "wnam" | "enam" | "sam" | "weur" | "eeur" | "apac" | "oc" | "afr" | "me";
 
@@ -17,6 +19,7 @@ export interface EchoSample {
     uplink: number;     // skew-corrected client → server delay
     downlink: number;   // skew-corrected server → client delay
     offset: number;     // θ (clock offset)
+    cgiTrace: CgiTrace; // Server CGI trace metadata
 }
 
 // Echoer results structure
@@ -69,6 +72,11 @@ export interface JsonOutput {
             downlink: MetricStats;
             offset: MetricStats;
         };
+    };
+    metadata: {
+        attribution: string;
+        whereDoData: any; // WhereDoApiV3 data subset
+        observedColos: string[];
     };
 }
 

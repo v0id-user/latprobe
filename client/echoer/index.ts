@@ -1,8 +1,9 @@
 import { Echoer } from "./worker";
 import { mean, min, max, standardDeviation } from "simple-statistics";
 import { saveResultsToJson } from "./json-exporter";
-import { displayPerClientComparison, displayClientResults } from "./graphs";
+import { displayPerClientComparison, displayClientResults, displayLocationMetadata, displayClientLocationDetails } from "./graphs";
 import type { CliConfig, DurableObjectLocationHint, EchoerResults } from "./types";
+import { getWhereDoApiV3, type WhereDoApiV3 } from "./where-do";
 
 // Available URL presets
 const DEPLOYED_VERSION = "wss://doperf.cloudflare-c49.workers.dev/";
@@ -112,7 +113,7 @@ function parseArgs(): CliConfig {
     return config;
 }
 
-function aggregateResults(results: EchoerResults[]): void {
+function aggregateResults(results: EchoerResults[], whereDoData: WhereDoApiV3 | null): void {
     const allSamples = results.flatMap(r => r.samples);
     const totalSamples = allSamples.length;
 
@@ -177,6 +178,9 @@ function aggregateResults(results: EchoerResults[]): void {
     // Display per-client comparison if multiple clients
     displayPerClientComparison(results);
     
+    // Display location metadata
+    displayLocationMetadata(results, whereDoData);
+    
     // Display individual client details
     if (results.length > 1) {
         console.log("\nIndividual Client Details:");
@@ -187,6 +191,10 @@ function aggregateResults(results: EchoerResults[]): void {
         console.log("\nClient Details:");
         displayClientResults(results[0], 1);
     }
+    
+    // Display detailed location information
+    displayClientLocationDetails(results);
+    
     console.log("");
 }
 
@@ -202,6 +210,17 @@ async function main() {
     console.log(`  URL: ${config.url}`);
     console.log(`  Location Hint: ${config.location}`);
     console.log(`  Processing Mode: ${config.processing ? "Enabled" : "Disabled"}`);
+    
+    // Fetch location data early
+    let whereDoData: WhereDoApiV3 | null = null;
+    try {
+        console.log(`\nFetching location data from where.durableobjects.live...`);
+        whereDoData = await getWhereDoApiV3();
+        console.log(`✓ Location data loaded successfully`);
+    } catch (error) {
+        console.log(`⚠ Warning: Could not fetch location data: ${error}`);
+    }
+    
     console.log(`\nStarting ${config.clients} parallel client(s)...\n`);
 
     // Create all clients
@@ -219,7 +238,7 @@ async function main() {
         );
 
         // Display aggregated results
-        aggregateResults(results);
+        aggregateResults(results, whereDoData);
 
         // Save results to JSON file
         const filename = await saveResultsToJson(results, config);
@@ -237,4 +256,4 @@ async function main() {
 main();
 
 
-// TODO: Integrate data from https://where.durableobjects.live/ into the results
+// Location data integration complete - powered by where.durableobjects.live

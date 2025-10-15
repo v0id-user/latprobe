@@ -1,8 +1,9 @@
 import { mean, min, max, standardDeviation } from "simple-statistics";
 import { mkdir } from "node:fs/promises";
 import type { CliConfig, JsonOutput, EchoerResults } from "./types";
+import { getWhereDoApiV3, type WhereDoApiV3 } from "./where-do";
 
-function generateJsonOutput(results: EchoerResults[], config: CliConfig): JsonOutput {
+function generateJsonOutput(results: EchoerResults[], config: CliConfig, whereDoData: WhereDoApiV3 | null): JsonOutput {
     const allSamples = results.flatMap(r => r.samples);
     const totalSamples = allSamples.length;
 
@@ -47,6 +48,9 @@ function generateJsonOutput(results: EchoerResults[], config: CliConfig): JsonOu
         }
     };
 
+    // Extract unique colos from all samples
+    const observedColos = [...new Set(allSamples.map(s => s.cgiTrace.colo).filter((colo): colo is string => colo !== null))];
+
     // Build the complete JSON structure
     return {
         timestamp: new Date().toISOString(),
@@ -65,13 +69,26 @@ function generateJsonOutput(results: EchoerResults[], config: CliConfig): JsonOu
         aggregated: {
             totalSamples,
             statistics: aggregatedStats
+        },
+        metadata: {
+            attribution: "Location data from where.durableobjects.live",
+            whereDoData: whereDoData || null,
+            observedColos
         }
     };
 }
 
 export async function saveResultsToJson(results: EchoerResults[], config: CliConfig): Promise<string> {
+    // Fetch WhereDoApiV3 data
+    let whereDoData: WhereDoApiV3 | null = null;
+    try {
+        whereDoData = await getWhereDoApiV3();
+    } catch (error) {
+        console.warn("Warning: Could not fetch location data from where.durableobjects.live:", error);
+    }
+
     // Generate JSON output
-    const jsonOutput = generateJsonOutput(results, config);
+    const jsonOutput = generateJsonOutput(results, config, whereDoData);
 
     // Create results directory if it doesn't exist
     const resultsDir = "./results";

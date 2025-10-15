@@ -3,7 +3,7 @@ import { type } from "arktype";
 import { mean } from "simple-statistics";
 import type { DurableObjectLocationHint, EchoSample, EchoerResults } from "./types";
 
-function deriveSample(T1: number, T2: number, T3: number, T4: number): EchoSample {
+function deriveSample(T1: number, T2: number, T3: number, T4: number, cgiTrace: any): EchoSample {
     const proc = T3 - T2;
 
     // NTP math
@@ -14,7 +14,7 @@ function deriveSample(T1: number, T2: number, T3: number, T4: number): EchoSampl
     const uplink = (T2 - T1) - theta;
     const downlink = (T4 - T3) + theta;
 
-    return { rtt: delta, proc, uplink, downlink, offset: theta };
+    return { rtt: delta, proc, uplink, downlink, offset: theta, cgiTrace };
 }
 
 export class Echoer {
@@ -93,7 +93,7 @@ export class Echoer {
         // Attach client receive timestamp
         parsed.t_rx2_epoch = Date.now();
 
-        const { t_tx_epoch: T1, t_rx_epoch: T2, t_tx2_epoch: T3, t_rx2_epoch: T4 } = parsed;
+        const { t_tx_epoch: T1, t_rx_epoch: T2, t_tx2_epoch: T3, t_rx2_epoch: T4, cgiTrace } = parsed;
 
         // Validate timestamps
         if (T1 == null || T2 == null || T3 == null || T4 == null) {
@@ -102,7 +102,7 @@ export class Echoer {
         }
 
         // Use NTP-style calculations with skew correction
-        const sample = deriveSample(T1, T2, T3, T4);
+        const sample = deriveSample(T1, T2, T3, T4, cgiTrace);
 
         // Store results
         this.results.push(sample);
