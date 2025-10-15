@@ -78,7 +78,6 @@ export function displayLocationMetadata(results: EchoerResults[], whereDoData: W
     
     if (whereDoData) {
         console.log(`  WhereDo Coverage: ${(whereDoData.coverage * 100).toFixed(1)}%`);
-        console.log(`  Hourly DO Spawns: ${whereDoData.hourly}`);
         
         // Show region distribution for observed colos
         const regionCounts: { [key: string]: number } = {};
