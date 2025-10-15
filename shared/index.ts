@@ -47,13 +47,16 @@ export const cgiTraceSchema = type({
 export type CgiTrace = typeof cgiTraceSchema.infer;
 
 const echoerSchema = type({
-    blob: "string",
-    // T1, T2
-    t_tx_epoch: "number.epoch | null",          // client transmit time
-    t_rx_epoch: "number.epoch | null",   // server receive time
-    // T3, T4
-    t_tx2_epoch: "number.epoch | null",  // server transmit time
-    t_rx2_epoch: "number.epoch | null",   // client receive time
+    // Any random stream of data
+	blob: "string",
+    
+	// T1, T2 | Uplink = t2(server) - t1(client)
+    t_tx_epoch: "number.epoch | null",   // client transmit time (client → server)
+    t_rx_epoch: "number.epoch | null",   // server receive time (server → client)
+
+    // T3, T4 | Downlink = t4(client) - t3(server)
+    t_tx2_epoch: "number.epoch | null",  // server transmit time (server → client)
+    t_rx2_epoch: "number.epoch | null",   // client receive time (server → client)
 
     // Durable Object metadata
     cgiTrace: cgiTraceSchema,
