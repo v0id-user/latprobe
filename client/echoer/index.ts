@@ -1,21 +1,11 @@
-import { Echoer, type EchoerResults } from "./worker";
+import { Echoer } from "./worker";
 import { mean, min, max, standardDeviation } from "simple-statistics";
+import { saveResultsToJson } from "./json-exporter";
+import type { CliConfig, DurableObjectLocationHint, EchoerResults } from "./types";
 
 // Available URL presets
 const DEPLOYED_VERSION = "wss://doperf.cloudflare-c49.workers.dev/";
 const LOCAL_DEPLOY_VERSION = "ws://localhost:8787/";
-
-// Type for location hints
-type DurableObjectLocationHint = "wnam" | "enam" | "sam" | "weur" | "eeur" | "apac" | "oc" | "afr" | "me";
-
-// CLI Configuration
-interface CliConfig {
-    clients: number;
-    samples: number;
-    url: string;
-    location: DurableObjectLocationHint;
-    processing: boolean;
-}
 
 function printHelp() {
     console.log(`
@@ -214,7 +204,11 @@ async function main() {
         // Display aggregated results
         aggregateResults(results);
 
-        console.log("✓ All clients completed successfully!\n");
+        // Save results to JSON file
+        const filename = await saveResultsToJson(results, config);
+
+        console.log("✓ All clients completed successfully!");
+        console.log(`📊 Results saved to: ${filename}\n`);
         process.exit(0);
     } catch (error) {
         console.error("\n✗ Error during execution:", error);

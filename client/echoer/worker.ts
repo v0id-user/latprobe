@@ -1,17 +1,7 @@
 import { parseEchoer, PERF_TYPE, type EchoerSchema } from "shared";
 import { type } from "arktype";
 import { mean } from "simple-statistics";
-
-// Exported from doperf/src/worker-configuration.d.ts
-type DurableObjectLocationHint = "wnam" | "enam" | "sam" | "weur" | "eeur" | "apac" | "oc" | "afr" | "me";
-
-type EchoSample = {
-    rtt: number;        // δ (true RTT after skew correction)
-    proc: number;       // server processing time (T3 - T2)
-    uplink: number;     // skew-corrected client → server delay
-    downlink: number;   // skew-corrected server → client delay
-    offset: number;     // θ (clock offset)
-};
+import type { DurableObjectLocationHint, EchoSample, EchoerResults } from "./types";
 
 function deriveSample(T1: number, T2: number, T3: number, T4: number): EchoSample {
     const proc = T3 - T2;
@@ -26,18 +16,6 @@ function deriveSample(T1: number, T2: number, T3: number, T4: number): EchoSampl
 
     return { rtt: delta, proc, uplink, downlink, offset: theta };
 }
-
-
-export type EchoerResults = {
-    samples: EchoSample[];
-    averages: {
-        rtt: number;
-        proc: number;
-        uplink: number;
-        downlink: number;
-        offset: number;
-    };
-};
 
 export class Echoer {
     ws: WebSocket;
