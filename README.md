@@ -17,7 +17,7 @@ bun run index.ts --clients 5 --samples 50
 - `--url <url>` - WebSocket URL (deployed, local, or custom)
 
 **Data Collected:**
-- RTT, processing time, uplink/downlink delays
+- RTT, processing time, uplink/downlink delays (skew corrected)
 - Client and server colo locations with airport names
 - Regional distribution and likelihood data from where.durableobjects.live
 
