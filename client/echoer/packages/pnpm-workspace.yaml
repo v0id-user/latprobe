@@ -1,9 +1,0 @@
-packages:
-  - apps/*
-  - packages/*
-onlyBuiltDependencies:
-  - '@biomejs/biome'
-  - '@sveltejs/kit'
-  - esbuild
-  - sharp
-  - workerd
