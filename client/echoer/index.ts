@@ -399,7 +399,7 @@ async function main() {
         );
 
         // Display results
-        displayResults(results, ourCgiTrace, whereDoData);
+        displayResults(results, ourCgiTrace, whereDoData, config.processing);
 
         // Save results to JSON file
         await saveResultsToJson(results, config);

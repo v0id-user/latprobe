@@ -25,7 +25,8 @@ export function updateProgress(current: number, total: number, clientId: number)
 export async function displayResults(
     results: EchoerResults[],
     clientCgiTrace: CgiTrace,
-    whereDoData?: WhereDoApiV3 | null
+    whereDoData?: WhereDoApiV3 | null,
+    processingMode?: boolean
 ): Promise<void> {
     // Clear the progress line
     console.log('\n');
@@ -58,9 +59,15 @@ export async function displayResults(
     // Display results
     console.log('═════════════════════════════════════════════════════');
     console.log('           ECHOER PERFORMANCE RESULTS');
+    if (processingMode) {
+        console.log('              (HEAVY PROCESSING MODE)');
+    }
     console.log('═════════════════════════════════════════════════════');
     console.log();
     console.log(`Clients: ${results.length} | Total Samples: ${allSamples.length}`);
+    if (processingMode) {
+        console.log('Mode: Heavy processing workloads enabled (Fibonacci, math ops, storage, etc.)');
+    }
     console.log();
     console.log('CLIENT LOCATION:');
     const clientColoFullName = clientCgiTrace.colo ? await extractColoFullName(clientCgiTrace.colo) : 'Unknown';
@@ -111,7 +118,20 @@ export async function displayResults(
     console.log();
     console.log('PERFORMANCE METRICS:');
     console.log(`  RTT:        Mean: ${rttStats.mean.toFixed(2)}ms | Min: ${rttStats.min.toFixed(2)}ms | Max: ${rttStats.max.toFixed(2)}ms`);
-    console.log(`  Processing: Mean: ${procStats.mean.toFixed(2)}ms | Min: ${procStats.min.toFixed(2)}ms | Max: ${procStats.max.toFixed(2)}ms`);
+    
+    // Display processing metrics based on mode
+    if (processingMode) {
+        console.log(`  Processing: Mean: ${procStats.mean.toFixed(2)}ms | Min: ${procStats.min.toFixed(2)}ms | Max: ${procStats.max.toFixed(2)}ms (SQLite operations, arrayOperations, calculateFibonacci, etc.)`);
+    } else {
+        // Show processing time but indicate it's minimal since no workloads were executed
+        const avgProc = procStats.mean.toFixed(2);
+        if (parseFloat(avgProc) < 1.0) {
+            console.log(`  Processing: Mean: ${avgProc}ms | Min: ${procStats.min.toFixed(2)}ms | Max: ${procStats.max.toFixed(2)}ms (minimal - no workloads)`);
+        } else {
+            console.log(`  Processing: Mean: ${avgProc}ms | Min: ${procStats.min.toFixed(2)}ms | Max: ${procStats.max.toFixed(2)}ms`);
+        }
+    }
+    
     console.log(`  Uplink:     Mean: ${uplinkStats.mean.toFixed(2)}ms | Min: ${uplinkStats.min.toFixed(2)}ms | Max: ${uplinkStats.max.toFixed(2)}ms`);
     console.log(`  Downlink:   Mean: ${downlinkStats.mean.toFixed(2)}ms | Min: ${downlinkStats.min.toFixed(2)}ms | Max: ${downlinkStats.max.toFixed(2)}ms`);
     console.log();
