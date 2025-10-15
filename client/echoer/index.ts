@@ -130,9 +130,6 @@ async function main() {
     } catch (error) {
         console.log(`⚠ Warning: Could not fetch location data: ${error}`);
     }
-    
-    // Small delay to let user see the config before dashboard takes over
-    await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Initialize progress display
     initializeProgressDisplay(config.clients, config.samples);
@@ -160,14 +157,11 @@ async function main() {
             clients.map(client => client.waitForCompletion())
         );
 
-        // Display results in dashboard
+        // Display results
         displayResults(results, whereDoData, ourCgiTrace);
 
         // Save results to JSON file
-        const filename = await saveResultsToJson(results, config);
-
-        // Keep dashboard visible - user can press 'q' to exit
-        // The process will exit when user closes the dashboard
+        await saveResultsToJson(results, config);
         
     } catch (error) {
         cleanup();
