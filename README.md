@@ -101,11 +101,11 @@ bun run index.ts --help
 - `-h, --help` — Display help message
 
 **Features:**
-- 🚀 Parallel client execution for load simulation
-- 📊 Aggregated statistics (mean, min, max, std dev)
-- 🎯 NTP-style clock synchronization for accurate measurements
-- 🌍 Multi-region support with location hints
-- 📈 Individual and aggregate result reporting
+- Parallel client execution for load simulation
+- Aggregated statistics (mean, min, max, std dev)
+- NTP-style clock synchronization for accurate measurements
+- Multi-region support with location hints
+- Individual and aggregate result reporting
 
 ### Stack
 
