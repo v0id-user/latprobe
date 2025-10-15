@@ -1,0 +1,15 @@
+{
+  "name": "shared",
+  "module": "index.ts",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "arktype": "^2.1.23"
+  }
+}
