@@ -1,3 +1,8 @@
 [submodule "client/echoer/data"]
 	path = client/echoer/data
 	url = https://github.com/davidmegginson/ourairports-data.git
+
+
+[submodule "client/echoer/packages"]
+	path = client/echoer/packages
+	url = https://github.com/helloimalastair/where-durableobjects-live/tree/main
