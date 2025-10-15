@@ -4,6 +4,7 @@ import { initializeProgressDisplay, updateProgress, displayResults, cleanup } fr
 import type { CliConfig, DurableObjectLocationHint, EchoerResults } from "./types";
 import { getWhereDoApiV3, type WhereDoApiV3 } from "./where-do";
 import { cgiTrace } from "./cgi-trace";
+import { regions } from "./regions";
 
 // Validation constants
 const MIN_CLIENTS = 1;
@@ -353,6 +354,7 @@ async function main() {
         // Display configuration summary
         console.log(`\nStarting Echoer CLI with configuration:`);
         console.log(`   • Clients: ${config.clients}`);
+        console.log(`   • Location: ${config.location} (${regions[config.location]})`);
         console.log(`   • Samples per client: ${config.samples}`);
         console.log(`   • Total samples: ${config.clients * config.samples}`);
         console.log(`   • URL: ${config.url}`);
