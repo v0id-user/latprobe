@@ -1,134 +1,226 @@
-import { parseEchoer, PERF_TYPE, type EchoerSchema } from "shared";
-import { type } from "arktype";
-import { mean } from "simple-statistics";
+import { Echoer, type EchoerResults } from "./worker";
+import { mean, min, max, standardDeviation } from "simple-statistics";
 
-// Exported from doperf/src/worker-configuration.d.ts
+// Available URL presets
+const DEPLOYED_VERSION = "wss://doperf.cloudflare-c49.workers.dev/";
+const LOCAL_DEPLOY_VERSION = "ws://localhost:8787/";
+
+// Type for location hints
 type DurableObjectLocationHint = "wnam" | "enam" | "sam" | "weur" | "eeur" | "apac" | "oc" | "afr" | "me";
 
-type EchoSample = {
-    rtt: number;        // δ (true RTT after skew correction)
-    proc: number;       // server processing time (T3 - T2)
-    uplink: number;     // skew-corrected client → server delay
-    downlink: number;   // skew-corrected server → client delay
-    offset: number;     // θ (clock offset)
-};
-
-function deriveSample(T1: number, T2: number, T3: number, T4: number): EchoSample {
-    const proc = T3 - T2;
-
-    // NTP math
-    const theta = ((T2 - T1) + (T3 - T4)) / 2;                       // offset
-    const delta = (T4 - T1) - (T3 - T2);                             // true RTT
-
-    // skew-corrected one-way legs
-    const uplink = (T2 - T1) - theta;
-    const downlink = (T4 - T3) + theta;
-
-    return { rtt: delta, proc, uplink, downlink, offset: theta };
-}
-
-
-class Echoer {
-    ws: WebSocket;
-    url: string;
+// CLI Configuration
+interface CliConfig {
+    clients: number;
     samples: number;
+    url: string;
+    location: DurableObjectLocationHint;
     processing: boolean;
-    results: EchoSample[] = [];
-
-    constructor(url: string, samples = 5, processing = false, locationHint: DurableObjectLocationHint) {
-        this.processing = processing;
-        this.url = url;
-        this.samples = samples;
-        this.ws = new WebSocket(`${url}?perfType=${processing ? PERF_TYPE.EchoerProcessing : PERF_TYPE.Echoer}&locationHint=${locationHint}`);
-        this.ws.onopen = this.handleOpen;
-        this.ws.onmessage = this.handleMessage;
-        this.ws.onerror = this.handleError;
-        this.ws.onclose = this.handleClose;
-    }
-
-    private handleOpen = () => {
-        console.log(`[Echoer] Connected → ${this.url}`);
-        this.sendPing();
-    };
-
-    private sendPing = () => {
-        const packet: EchoerSchema = {
-            blob: crypto.randomUUID(),
-            t_tx_epoch: Date.now(),
-            t_rx_epoch: null,
-            t_tx2_epoch: null,
-            t_rx2_epoch: null,
-        };
-        this.ws.send(JSON.stringify(packet));
-    };
-
-    private handleMessage = (event: MessageEvent) => {
-        const parsed = parseEchoer(event.data);
-        if (parsed instanceof type.errors) return console.error("[Echoer] Parse error:", parsed.summary);
-
-        // Attach client receive timestamp
-        parsed.t_rx2_epoch = Date.now();
-
-        const { t_tx_epoch: T1, t_rx_epoch: T2, t_tx2_epoch: T3, t_rx2_epoch: T4 } = parsed;
-
-        // Validate timestamps
-        if (T1 == null || T2 == null || T3 == null || T4 == null) {
-            console.warn("[Echoer] Incomplete packet:", parsed);
-            return;
-        }
-
-        // Use NTP-style calculations with skew correction
-        const sample = deriveSample(T1, T2, T3, T4);
-
-        // Store results
-        this.results.push(sample);
-
-        console.table({ rtt: sample.rtt, proc: sample.proc, uplink: sample.uplink, downlink: sample.downlink, offset: sample.offset });
-
-        if (this.results.length < this.samples) {
-            // Bug: higher timeout ms causes some sort of jitter in the results for some reason
-            //      it causes +1ms jitter in the RTT results
-            setTimeout(this.sendPing, 10);
-        } else {
-            this.summarize();
-        }
-    };
-
-    private summarize() {
-        const rtts = this.results.map(r => r.rtt);
-        const procs = this.results.map(r => r.proc);
-        const uplinks = this.results.map(r => r.uplink);
-        const downlinks = this.results.map(r => r.downlink);
-        const offsets = this.results.map(r => r.offset);
-
-        console.log("\n====== Echoer Results ======");
-        console.log(`Total Samples Collected: ${this.results.length}`);
-        console.log(
-            `Server Mode: ${this.processing ? "Baseline Echo (no additional processing)" : "Processing Enabled (includes SQLite and computations)"}`
-        );
-        console.log(`Average RTT:      ${mean(rtts).toFixed(2)} ms`);
-        console.log(`Average Server Processing: ${mean(procs).toFixed(2)} ms`);
-        console.log(`Average Uplink:   ${mean(uplinks).toFixed(2)} ms`);
-        console.log(`Average Downlink: ${mean(downlinks).toFixed(2)} ms`);
-        console.log(`Average Clock Offset: ${mean(offsets).toFixed(2)} ms`);
-        console.log("===========================\n");
-    }
-
-
-    private handleError = (err: Event) => {
-        console.error("[Echoer] WebSocket error:", err);
-    };
-
-    private handleClose = (event: CloseEvent) => {
-        if (!event.wasClean) {
-            console.warn(`[Echoer] Closed unexpectedly (code ${event.code})`);
-        } else {
-            console.log("[Echoer] Connection closed cleanly.");
-        }
-    };
 }
 
-const DEPLOYED_VERSION = "wss://doperf.cloudflare-c49.workers.dev/"
-const LOCAL_DEPLOY_VERSION = "ws://localhost:8787/"
-// me = Middle East
-new Echoer(DEPLOYED_VERSION, 100, true, "me");
+function printHelp() {
+    console.log(`
+Echoer CLI - Cloudflare Durable Objects Performance Testing Tool
+
+Usage: bun run index.ts [options]
+
+Options:
+  -c, --clients <number>     Number of parallel clients (default: 1)
+  -s, --samples <number>     Number of samples per client (default: 100)
+  -u, --url <url>           WebSocket URL (default: deployed)
+                            Presets: "deployed", "local", or full URL
+  -l, --location <hint>     Location hint: wnam, enam, sam, weur, eeur, apac, oc, afr, me (default: me)
+  -p, --processing          Enable processing mode (default: false)
+  -h, --help                Display this help message
+
+Examples:
+  bun run index.ts --clients 10 --samples 50
+  bun run index.ts -c 5 -s 100 -l weur --processing
+  bun run index.ts --url local --clients 3
+`);
+}
+
+function parseArgs(): CliConfig {
+    const args = process.argv.slice(2);
+    const config: CliConfig = {
+        clients: 1,
+        samples: 100,
+        url: DEPLOYED_VERSION,
+        location: "me",
+        processing: false
+    };
+
+    for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+        const nextArg = args[i + 1];
+
+        switch (arg) {
+            case "-h":
+            case "--help":
+                printHelp();
+                process.exit(0);
+                break;
+
+            case "-c":
+            case "--clients":
+                if (!nextArg || isNaN(Number(nextArg))) {
+                    console.error("Error: --clients requires a number");
+                    process.exit(1);
+                }
+                config.clients = parseInt(nextArg, 10);
+                i++;
+                break;
+
+            case "-s":
+            case "--samples":
+                if (!nextArg || isNaN(Number(nextArg))) {
+                    console.error("Error: --samples requires a number");
+                    process.exit(1);
+                }
+                config.samples = parseInt(nextArg, 10);
+                i++;
+                break;
+
+            case "-u":
+            case "--url":
+                if (!nextArg) {
+                    console.error("Error: --url requires a value");
+                    process.exit(1);
+                }
+                if (nextArg === "deployed") {
+                    config.url = DEPLOYED_VERSION;
+                } else if (nextArg === "local") {
+                    config.url = LOCAL_DEPLOY_VERSION;
+                } else {
+                    config.url = nextArg;
+                }
+                i++;
+                break;
+
+            case "-l":
+            case "--location":
+                if (!nextArg) {
+                    console.error("Error: --location requires a value");
+                    process.exit(1);
+                }
+                config.location = nextArg as DurableObjectLocationHint;
+                i++;
+                break;
+
+            case "-p":
+            case "--processing":
+                config.processing = true;
+                break;
+
+            default:
+                console.error(`Unknown argument: ${arg}`);
+                printHelp();
+                process.exit(1);
+        }
+    }
+
+    return config;
+}
+
+function aggregateResults(results: EchoerResults[]): void {
+    const allSamples = results.flatMap(r => r.samples);
+    const totalSamples = allSamples.length;
+
+    // Extract all metrics
+    const allRtts = allSamples.map(s => s.rtt);
+    const allProcs = allSamples.map(s => s.proc);
+    const allUplinks = allSamples.map(s => s.uplink);
+    const allDownlinks = allSamples.map(s => s.downlink);
+    const allOffsets = allSamples.map(s => s.offset);
+
+    // Calculate aggregated statistics
+    const stats = {
+        rtt: {
+            mean: mean(allRtts),
+            min: min(allRtts),
+            max: max(allRtts),
+            stdDev: standardDeviation(allRtts)
+        },
+        proc: {
+            mean: mean(allProcs),
+            min: min(allProcs),
+            max: max(allProcs),
+            stdDev: standardDeviation(allProcs)
+        },
+        uplink: {
+            mean: mean(allUplinks),
+            min: min(allUplinks),
+            max: max(allUplinks),
+            stdDev: standardDeviation(allUplinks)
+        },
+        downlink: {
+            mean: mean(allDownlinks),
+            min: min(allDownlinks),
+            max: max(allDownlinks),
+            stdDev: standardDeviation(allDownlinks)
+        },
+        offset: {
+            mean: mean(allOffsets),
+            min: min(allOffsets),
+            max: max(allOffsets),
+            stdDev: standardDeviation(allOffsets)
+        }
+    };
+
+    console.log("\n");
+    console.log("╔════════════════════════════════════════════════════════════════╗");
+    console.log("║              AGGREGATED RESULTS (ALL CLIENTS)                  ║");
+    console.log("╚════════════════════════════════════════════════════════════════╝");
+    console.log(`\nTotal Clients:  ${results.length}`);
+    console.log(`Total Samples:  ${totalSamples}`);
+    console.log(`\n┌─────────────────────────────────────────────────────────────┐`);
+    console.log(`│ Metric          │   Mean   │   Min    │   Max    │  Std Dev │`);
+    console.log(`├─────────────────────────────────────────────────────────────┤`);
+    console.log(`│ RTT             │ ${stats.rtt.mean.toFixed(2).padStart(6)} ms│ ${stats.rtt.min.toFixed(2).padStart(6)} ms│ ${stats.rtt.max.toFixed(2).padStart(6)} ms│ ${stats.rtt.stdDev.toFixed(2).padStart(6)} ms│`);
+    console.log(`│ Processing      │ ${stats.proc.mean.toFixed(2).padStart(6)} ms│ ${stats.proc.min.toFixed(2).padStart(6)} ms│ ${stats.proc.max.toFixed(2).padStart(6)} ms│ ${stats.proc.stdDev.toFixed(2).padStart(6)} ms│`);
+    console.log(`│ Uplink          │ ${stats.uplink.mean.toFixed(2).padStart(6)} ms│ ${stats.uplink.min.toFixed(2).padStart(6)} ms│ ${stats.uplink.max.toFixed(2).padStart(6)} ms│ ${stats.uplink.stdDev.toFixed(2).padStart(6)} ms│`);
+    console.log(`│ Downlink        │ ${stats.downlink.mean.toFixed(2).padStart(6)} ms│ ${stats.downlink.min.toFixed(2).padStart(6)} ms│ ${stats.downlink.max.toFixed(2).padStart(6)} ms│ ${stats.downlink.stdDev.toFixed(2).padStart(6)} ms│`);
+    console.log(`│ Clock Offset    │ ${stats.offset.mean.toFixed(2).padStart(6)} ms│ ${stats.offset.min.toFixed(2).padStart(6)} ms│ ${stats.offset.max.toFixed(2).padStart(6)} ms│ ${stats.offset.stdDev.toFixed(2).padStart(6)} ms│`);
+    console.log(`└─────────────────────────────────────────────────────────────┘\n`);
+}
+
+async function main() {
+    const config = parseArgs();
+
+    console.log("╔════════════════════════════════════════════════════════════════╗");
+    console.log("║          Echoer Performance Testing Tool - Starting            ║");
+    console.log("╚════════════════════════════════════════════════════════════════╝");
+    console.log(`\nConfiguration:`);
+    console.log(`  Parallel Clients: ${config.clients}`);
+    console.log(`  Samples per Client: ${config.samples}`);
+    console.log(`  URL: ${config.url}`);
+    console.log(`  Location Hint: ${config.location}`);
+    console.log(`  Processing Mode: ${config.processing ? "Enabled" : "Disabled"}`);
+    console.log(`\nStarting ${config.clients} parallel client(s)...\n`);
+
+    // Create all clients
+    const clients: Echoer[] = [];
+    for (let i = 1; i <= config.clients; i++) {
+        clients.push(
+            new Echoer(config.url, config.samples, config.processing, config.location, i)
+        );
+    }
+
+    // Wait for all clients to complete in parallel
+    try {
+        const results = await Promise.all(
+            clients.map(client => client.waitForCompletion())
+        );
+
+        // Display aggregated results
+        aggregateResults(results);
+
+        console.log("✓ All clients completed successfully!\n");
+        process.exit(0);
+    } catch (error) {
+        console.error("\n✗ Error during execution:", error);
+        process.exit(1);
+    }
+}
+
+// Run the CLI
+main();
