@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "arktype": "^2.1.23",
-    "simple-statistics": "^7.8.8"
+    "simple-statistics": "^7.8.8",
+    "sparkly": "^6.0.1"
   }
 }

@@ -1,6 +1,7 @@
 import { Echoer } from "./worker";
 import { mean, min, max, standardDeviation } from "simple-statistics";
 import { saveResultsToJson } from "./json-exporter";
+import { displayPerClientComparison, displayClientResults } from "./graphs";
 import type { CliConfig, DurableObjectLocationHint, EchoerResults } from "./types";
 
 // Available URL presets
@@ -162,6 +163,7 @@ function aggregateResults(results: EchoerResults[]): void {
     console.log("╚════════════════════════════════════════════════════════════════╝");
     console.log(`\nTotal Clients:  ${results.length}`);
     console.log(`Total Samples:  ${totalSamples}`);
+    
     console.log(`\n┌─────────────────────────────────────────────────────────────┐`);
     console.log(`│ Metric          │   Mean   │   Min    │   Max    │  Std Dev │`);
     console.log(`├─────────────────────────────────────────────────────────────┤`);
@@ -170,7 +172,22 @@ function aggregateResults(results: EchoerResults[]): void {
     console.log(`│ Uplink          │ ${stats.uplink.mean.toFixed(2).padStart(6)} ms│ ${stats.uplink.min.toFixed(2).padStart(6)} ms│ ${stats.uplink.max.toFixed(2).padStart(6)} ms│ ${stats.uplink.stdDev.toFixed(2).padStart(6)} ms│`);
     console.log(`│ Downlink        │ ${stats.downlink.mean.toFixed(2).padStart(6)} ms│ ${stats.downlink.min.toFixed(2).padStart(6)} ms│ ${stats.downlink.max.toFixed(2).padStart(6)} ms│ ${stats.downlink.stdDev.toFixed(2).padStart(6)} ms│`);
     console.log(`│ Clock Offset    │ ${stats.offset.mean.toFixed(2).padStart(6)} ms│ ${stats.offset.min.toFixed(2).padStart(6)} ms│ ${stats.offset.max.toFixed(2).padStart(6)} ms│ ${stats.offset.stdDev.toFixed(2).padStart(6)} ms│`);
-    console.log(`└─────────────────────────────────────────────────────────────┘\n`);
+    console.log(`└─────────────────────────────────────────────────────────────┘`);
+    
+    // Display per-client comparison if multiple clients
+    displayPerClientComparison(results);
+    
+    // Display individual client details
+    if (results.length > 1) {
+        console.log("\nIndividual Client Details:");
+        results.forEach((result, index) => {
+            displayClientResults(result, index + 1);
+        });
+    } else if (results.length === 1 && results[0]) {
+        console.log("\nClient Details:");
+        displayClientResults(results[0], 1);
+    }
+    console.log("");
 }
 
 async function main() {
