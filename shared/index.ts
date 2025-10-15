@@ -5,6 +5,47 @@ export enum PERF_TYPE {
     EchoerProcessing = "echoer-processing"
 }
 
+/**
+ * Cloudflare Common Gateway Interface (CGI) trace data schema
+ * Contains information about the Durable Object's location and network details
+ */
+export const cgiTraceSchema = type({
+	/** Flight ID */
+	fl: "string | null",
+	/** Host */
+	h: "string | null",
+	/** IP address */
+	ip: "string | null",
+	/** Timestamp */
+	ts: "string | null",
+	/** Visit scheme */
+	visit_scheme: "string | null",
+	/** User agent */
+	uag: "string | null",
+	/** Colo (data center location) */
+	colo: "string | null",
+	/** Sliver */
+	sliver: "string | null",
+	/** HTTP version */
+	http: "string | null",
+	/** Location */
+	loc: "string | null",
+	/** TLS version */
+	tls: "string | null",
+	/** SNI (Server Name Indication) */
+	sni: "string | null",
+	/** WARP status */
+	warp: "string | null",
+	/** Gateway */
+	gateway: "string | null",
+	/** RBI */
+	rbi: "string | null",
+	/** KEX */
+	kex: "string | null",
+});
+
+export type CgiTrace = typeof cgiTraceSchema.infer;
+
 const echoerSchema = type({
     blob: "string",
     // T1, T2
@@ -12,7 +53,10 @@ const echoerSchema = type({
     t_rx_epoch: "number.epoch | null",   // server receive time
     // T3, T4
     t_tx2_epoch: "number.epoch | null",  // server transmit time
-    t_rx2_epoch: "number.epoch | null"   // client receive time
+    t_rx2_epoch: "number.epoch | null",   // client receive time
+
+    // Durable Object metadata
+    cgiTrace: cgiTraceSchema,
 });
 
 export const parseEchoer = type("string.json.parse").to(echoerSchema);

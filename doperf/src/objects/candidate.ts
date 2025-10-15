@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { PERF_TYPE } from "shared";
+import { CgiTrace, PERF_TYPE } from "shared";
 import { parseEchoer } from "shared";
 import { type } from "arktype";
 import { executeWorkloads } from "./workloads";
@@ -37,6 +37,13 @@ export class Candidate extends DurableObject<Env> {
 			console.error("[Candidate] invalid perfType");
 			return new Response(JSON.stringify({ error: "invalid perfType" }), { status: 400 });
 		}
+
+		// Extract the cgi trace
+		const cgiTrace = await this.#cgiTrace();
+
+		// Store the cgi trace in the Durable Object state
+		this.ctx.storage.put("cgiTrace", cgiTrace);
+
 		// Upgrade the request to a WebSocket
 		const webSocketPair = new WebSocketPair();
 		const [client, server] = Object.values(webSocketPair);
@@ -47,6 +54,39 @@ export class Candidate extends DurableObject<Env> {
 			status: 101,
 			webSocket: client,
 		});
+	}
+
+	/**
+	 * Extract info about the Durable Object from the Cloudflare Common Gateway Interface (CGI) trace
+	 *
+	 * Example response (actual values replaced with *):
+	 * fl=*
+	 * h=*
+	 * ip=*
+	 * ts=*
+	 * visit_scheme=*
+	 * uag=*
+	 * colo=*
+	 * sliver=*
+	 * http=*
+	 * loc=*
+	 * tls=*
+	 * sni=*
+	 * warp=*
+	 * gateway=*
+	 * rbi=*
+	 * kex=*
+	 */
+	async #cgiTrace() {
+		const traceText = await (await fetch("https://www.cloudflare.com/cdn-cgi/trace")).text();
+		const result: Record<string, string> = {};
+		for (const line of traceText.split("\n")) {
+			const [key, ...rest] = line.split("=");
+			if (key && rest.length) {
+				result[key] = rest.join("=");
+			}
+		}
+		return result;
 	}
 
 	async webSocketMessage(ws: WebSocket, data: string): Promise<void> {
@@ -60,6 +100,7 @@ export class Candidate extends DurableObject<Env> {
 		}
 
 		const t_rx_epoch = Date.now();
+		const cgiTrace = await this.ctx.storage.get("cgiTrace") as CgiTrace;
 
 		switch (perfType) {
 			case PERF_TYPE.EchoerProcessing:
@@ -85,6 +126,7 @@ export class Candidate extends DurableObject<Env> {
 
 				// Attach server transmit timestamp
 				parsed.t_tx2_epoch = Date.now();
+				parsed.cgiTrace = cgiTrace;
 
 				// Echo back
 				ws.send(JSON.stringify(parsed));

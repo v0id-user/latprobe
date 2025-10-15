@@ -64,6 +64,24 @@ export class Echoer {
             t_rx_epoch: null,
             t_tx2_epoch: null,
             t_rx2_epoch: null,
+            cgiTrace: {
+                fl: null,
+                h: null,
+                ip: null,
+                ts: null,
+                visit_scheme: null,
+                uag: null,
+                colo: null,
+                sliver: null,
+                http: null,
+                loc: null,
+                tls: null,
+                sni: null,
+                warp: null,
+                gateway: null,
+                rbi: null,
+                kex: null,
+            },
         };
         this.ws.send(JSON.stringify(packet));
     };
@@ -114,18 +132,6 @@ export class Echoer {
             downlink: mean(downlinks),
             offset: mean(offsets)
         };
-
-        console.log(`\n====== Echoer #${this.clientId} Results ======`);
-        console.log(`Total Samples Collected: ${this.results.length}`);
-        console.log(
-            `Server Mode: ${this.processing ? "Processing Enabled (includes SQLite and computations)" : "Baseline Echo (no additional processing)"}`
-        );
-        console.log(`Average RTT:      ${averages.rtt.toFixed(2)} ms`);
-        console.log(`Average Server Processing: ${averages.proc.toFixed(2)} ms`);
-        console.log(`Average Uplink:   ${averages.uplink.toFixed(2)} ms`);
-        console.log(`Average Downlink: ${averages.downlink.toFixed(2)} ms`);
-        console.log(`Average Clock Offset: ${averages.offset.toFixed(2)} ms`);
-        console.log("===========================\n");
 
         // Close the WebSocket connection
         this.ws.close();
